@@ -24,6 +24,11 @@ DEVICE_SUBTYPE_DC_ERV = "DCERV"
 DEVICE_SUBTYPE_NEW_DC_ERV = "NEWDCERV"
 DEVICE_SUBTYPE_LD5C = "LD5C"
 DEVICE_SUBTYPE_LD6C = "LD6C"
+# CABINET-* (FY-50ZR1C etc.): cabinet-style floor-placed ERV. Control state
+# (runSta/runM/airVo/holM/windPath) lives only in the device-list statusAll
+# cache; live sensors (oaPMC/oaHumC/oaTeC/raFilExTL/timers) come from
+# ADevGetStatusMidERV. Info-family endpoints return 4099 (payload mismatch).
+DEVICE_SUBTYPE_CABINET = "CABINET"
 # AUTO = device not matched by devSubTypeId or statusAll signature at config
 # time; the runtime probe loop in the coordinator will converge on a real
 # protocol on the first fetch and persist it back to the config entry.
@@ -134,6 +139,35 @@ LD6C_AIR_VOLUME_TO_PRESET = {
 }
 
 LD6C_AIR_VOLUME_STEPS = [0, 1, 2]
+
+# CABINET air volume follows MidERV 3-step convention (1=low, 2=medium, 3=high).
+# Verified against FY-50ZR1C statusAll reading airVolume="2" with the device
+# running (runningStatus="1").
+CABINET_PRESET_TO_AIR_VOLUME = {
+    PRESET_LOW: 1,
+    PRESET_MEDIUM: 2,
+    PRESET_HIGH: 3,
+}
+
+CABINET_AIR_VOLUME_TO_PRESET = {
+    1: PRESET_LOW,
+    2: PRESET_MEDIUM,
+    3: PRESET_HIGH,
+}
+
+CABINET_AIR_VOLUME_STEPS = [1, 2, 3]
+
+CABINET_RUN_MODE_TO_OPTION = {
+    0: RUN_MODE_HEAT_EXCHANGE,
+    1: RUN_MODE_EXTERNAL_CIRCULATION,
+    2: RUN_MODE_INTERNAL_CIRCULATION,
+    3: RUN_MODE_SLEEP,
+    4: RUN_MODE_AUTO_ECO,
+}
+
+CABINET_OPTION_TO_RUN_MODE = {
+    option: mode for mode, option in CABINET_RUN_MODE_TO_OPTION.items()
+}
 
 DC_ERV_RUN_MODE_TO_OPTION = {
     48: RUN_MODE_HEAT_EXCHANGE,
@@ -252,6 +286,32 @@ NEW_DCERV_SIGNATURE_KEYS = {
     "InLoopFilEx",
 }
 
+# CABINET-* (FY-50ZR1C etc.): cabinet-style floor-placed ERV. Signature keys
+# are long camelCase statusAll field names that only cabinet devices expose -
+# includes the LD5C-shared subset (runningStatus/runningMode/airVolume/
+# holidayMode/windPath) plus cabinet-unique fields (pPressureMode/
+# oaFilterClCycle/oaFilterExCycle/raCO2Cur/raPM25Cur + filter time-left).
+# Verified against endpoint_report_20260908-232131.json: all 15 keys present
+# in raw statusAll. Cannot collide with DCERV (uses short bean names), LD6C
+# (uses nanoe/co2Sen/slfSendW), or NEWDCERV (uses pmFstFilCl/InLoopFilEx).
+CABINET_SIGNATURE_KEYS = {
+    "runningStatus",
+    "runningMode",
+    "airVolume",
+    "holidayMode",
+    "windPath",
+    "pPressureMode",
+    "oaFilterClCycle",
+    "oaFilterExCycle",
+    "oaFilterExTimeLeft",
+    "saFilterExTimeLeft",
+    "raCO2Cur",
+    "raCO2Max",
+    "raPM25Cur",
+    "raPM25Max",
+    "raTempCur",
+}
+
 SENSOR_KEYS_BY_SUBTYPE = {
     DEVICE_SUBTYPE_DC_ERV: (
         "oaPMC",
@@ -296,6 +356,24 @@ SENSOR_KEYS_BY_SUBTYPE = {
         "oaPMC",
         "oaTeC",
         "oaHumC",
+        "oaFilExTL",
+        "saFilExTL",
+        "raFilExTL",
+    ),
+    # CABINET-* (FY-50ZR1C etc.): live sensors from ADevGetStatusMidERV
+    # (oaPMC/oaTeC/oaHumC/raFilExTL) + extra sensors mapped from statusAll
+    # (raPMC/raTeC/raHumC/saTeC/raCO2C/oaFilExTL/saFilExTL). SaHumC/SaPMC and
+    # TVOC are not whitelisted: statusAll reports them as sentinels (255/65535)
+    # on this model, so without whitelisting we skip creating useless entities.
+    DEVICE_SUBTYPE_CABINET: (
+        "oaPMC",
+        "oaTeC",
+        "oaHumC",
+        "raPMC",
+        "raTeC",
+        "raHumC",
+        "saTeC",
+        "raCO2C",
         "oaFilExTL",
         "saFilExTL",
         "raFilExTL",
@@ -477,6 +555,54 @@ LD5C_STATUS_ALL_FIELD_MAP = {
     "raHumidityCur": "raHumC",
     "saHumidityCur": "saHumC",
 }
+
+# CABINET-* (FY-50ZR1C etc.): statusAll field map. Control fields (runSta/
+# runM/airVo/holM/windPath/pPressureMode) ONLY exist in statusAll (the
+# MidERV endpoint returns sensors + timers + preSet but no power/run-mode/
+# air-volume fields for this device family). Outdoor sensors + raFilExTL are
+# NOT remapped - the live MidERV GET returns them as real values, and
+# statusAll's oaPM25Cur=65535 / saHumidityCur=255 would otherwise overwrite
+# the live readings with sentinels. Filter-life + extra sensors come from
+# statusAll (MidERV only exposes return filter life).
+CABINET_STATUS_ALL_FIELD_MAP = {
+    # Control (statusAll only)
+    "runningStatus": "runSta",
+    "runningMode": "runM",
+    "airVolume": "airVo",
+    "holidayMode": "holM",
+    "windPath": "windPath",
+    "pPressureMode": "pPressureMode",
+    "heatingMode": "HeatM",
+    # Filter life (MidERV only exposes raFilExTL)
+    "oaFilterExTimeLeft": "oaFilExTL",
+    "saFilterExTimeLeft": "saFilExTL",
+    # Sensors unique to statusAll
+    "raPM25Cur": "raPMC",
+    "raCO2Cur": "raCO2C",
+    "raTempCur": "raTeC",
+    "raHumidityCur": "raHumC",
+    "saTempCur": "saTeC",
+}
+
+DEFAULT_CABINET_PARAMS = {
+    "runSta": 0,
+    "runM": 255,
+    "airVo": 255,
+    "holM": 255,
+    "windPath": 0,
+    "pPressureMode": 255,
+    "HeatM": 255,
+    "oaFilExTL": 255,
+    "saFilExTL": 255,
+    "raFilExTL": 255,
+}
+
+CABINET_SAFE_CONTROL_KEYS = [
+    CONF_DEVICE_ID,
+    CONF_TOKEN,
+    CONF_USR_ID,
+    *DEFAULT_CABINET_PARAMS.keys(),
+]
 
 DEFAULT_DC_ERV_PARAMS = {
     "runSta": 0,
@@ -767,6 +893,7 @@ LD6C_EXTRA_SELECTS = (
 # Checked at config time against device metadata, and at runtime by the
 # coordinator probe loop.
 PROTOCOL_SIGNATURES = {
+    DEVICE_SUBTYPE_CABINET: CABINET_SIGNATURE_KEYS,
     DEVICE_SUBTYPE_LD5C: (
         "runningStatus",
         "runningMode",
@@ -783,6 +910,44 @@ PROTOCOL_SIGNATURES = {
 }
 
 SUPPORTED_ERV_SUBTYPES = {
+    # CABINET-* (FY-50ZR1C etc.): cabinet-style floor-placed ERV. Placed
+    # first so the runtime probe loop scores CABINET against the device's own
+    # statusAll signature before any other protocol can claim the device
+    # (statusAll fields overlap with LD5C).
+    DEVICE_SUBTYPE_CABINET: {
+        "label": "CabinetERV",
+        # Live sensors + timers come from ADevGetStatusMidERV (MidERV endpoint
+        # answers real values for cabinet devices; InfoLD5C/LD6C/InfoERV all
+        # fail or return sentinels).
+        "get_url": "https://app.psmartcloud.com/App/ADevGetStatusMidERV",
+        # SET endpoint assumed to mirror GET (MidERV-style single-field
+        # commands). Not yet verified against a live FY-50ZR1C - if SET
+        # silently drops commands, try the LD5C SET family next.
+        "set_url": "https://app.psmartcloud.com/App/ADevSetStatusMidERV",
+        "default_params": DEFAULT_CABINET_PARAMS,
+        "control_params": DEFAULT_CABINET_PARAMS,
+        # single_field_commands=True mirrors MidERV (one field per request,
+        # 255 = keep) which works without a live-status merge. Status-all
+        # values for control fields may lag real device state by up to 30s
+        # (the cloud cache doesn't refresh post-command - same caveat as
+        # LD5C pre-v1.7.4).
+        "merge_current_status_for_control": False,
+        "single_field_commands": True,
+        "safe_control_keys": CABINET_SAFE_CONTROL_KEYS,
+        "preset_to_air_volume": CABINET_PRESET_TO_AIR_VOLUME,
+        "air_volume_to_preset": CABINET_AIR_VOLUME_TO_PRESET,
+        "air_volume_steps": CABINET_AIR_VOLUME_STEPS,
+        "run_mode_to_option": CABINET_RUN_MODE_TO_OPTION,
+        "option_to_run_mode": CABINET_OPTION_TO_RUN_MODE,
+        "signature_keys": CABINET_SIGNATURE_KEYS,
+        "extra_selects": (),
+        # Control state (runSta/runM/airVo/holM/windPath) + filter-time-left
+        # + extra sensors come from the device-list statusAll cache and are
+        # mapped via CABINET_STATUS_ALL_FIELD_MAP. Outdoor sensors + raFilExTL
+        # intentionally NOT mapped: live MidERV GET provides real values.
+        "uses_status_all": True,
+        "status_all_field_map": CABINET_STATUS_ALL_FIELD_MAP,
+    },
     DEVICE_SUBTYPE_SMALL_ERV: {
         "label": "SmallERV",
         "get_url": "https://app.psmartcloud.com/App/ADevGetStatusSmallERV",
@@ -964,4 +1129,8 @@ SUPPORTED_ERV_DEVICE_HINTS = {
     DEVICE_SUBTYPE_NEW_DC_ERV,
     DEVICE_SUBTYPE_LD5C,
     DEVICE_SUBTYPE_LD6C,
+    # CABINET-* matches any cabinet-style floor-placed ERV (FY-50ZR1C etc.)
+    # via devSubTypeId prefix. Sorted by length-descending at match time, so
+    # CABINET gets tried before any shorter prefix.
+    DEVICE_SUBTYPE_CABINET,
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.8
+
+- **新增 CABINET-* 子类型协议支持（柜式落地式 ERV，FY-50ZR1C 等）**。`devSubTypeId` 前缀 `CABINET`（如 `CABINET-02`）的柜式设备现在开箱即用：自动识别 + 完整控制 + 传感器。
+  - **数据源分工（基于用户诊断报告 `endpoint_report_20260908-232131.json`）**：控制状态（`runSta`/`runM`/`airVo`/`holM`/`windPath`/`pPressureMode`/`HeatM`）仅在设备列表 `statusAll` 缓存中，传感器（`oaPMC`/`oaHumC`/`oaTeC`/`raFilExTL` + 6 组定时器 + `raFilEx`/`preSet`）来自实时 `ADevGetStatusMidERV`。两条数据源合并后再过滤无效哨兵（65535/255/127）。
+  - **协议签名**：`CABINET_SIGNATURE_KEYS` 用 15 个 statusAll 长驼峰字段（`runningStatus`/`runningMode`/`airVolume`/`holidayMode`/`windPath`/`pPressureMode` + 滤网/CO2/PM2.5/temp/humidity 系列），与 LD5C 共享 5 个字段但比 LD5C 多 10 个独有字段，配置时和运行时探测都不会误判为 LD5C。
+  - **风量 3 档 / 运行模式 5 种**：复用 MidERV 编码（1=低 / 2=中 / 3=高；0=热交换 / 1=外循环 / 2=内循环 / 3=睡眠 / 4=自动ECO）。当前 `airVolume=2` 验证为"中"档。
+  - **传感器白名单 11 项**：室外/回风 PM2.5/温度/湿度、送风温度、回风 CO2、外/送/回 滤网剩余寿命。送风湿度/送风 PM2.5 在该机型上报无效哨兵值，不创建实体避免显示 unknown。
+  - **Info 家族端点（`ADevGetStatusInfoERV`/`InfoFloorPlacedERV`）实测返回 4099 "缺少必须的属性"**：本机型走 statusAll + MidERV 端点组合；后续若松下放出真实 Info 端点可平滑切换。
+  - **已知限制**：控制命令下发后 statusAll 缓存不立即刷新（与 LD5C v1.7.4 前同样的现象），UI 控制状态会有 ≤30 秒延迟；传感器为实时不受影响。SET 端点暂用 `ADevSetStatusMidERV`，未实测；若云端静默丢弃，可手动改为 LD5C Info 家族端点。
+
 ## 1.7.7
 
 - **LD6C 运行模式/风量枚举对齐松下 App 反编译数据（issue #4 修正 v1.7.6 猜测）**。数据来自社区对松下 App `Ld6cBeanConvert` 的逆向（rudyll 仓库）：运行模式 **1=热交换 / 4=内循环 / 6=自动ECO / 7=消毒**，风量 **0=静音 / 1=低 / 2=高**（v1.7.6 误用 DCERV 的 0/1 双档，已修正为三档）。LD6C 现在支持运行模式切换（含独有的消毒模式）。
