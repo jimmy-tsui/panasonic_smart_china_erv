@@ -290,10 +290,13 @@ NEW_DCERV_SIGNATURE_KEYS = {
 # are long camelCase statusAll field names that only cabinet devices expose -
 # includes the LD5C-shared subset (runningStatus/runningMode/airVolume/
 # holidayMode/windPath) plus cabinet-unique fields (pPressureMode/
-# oaFilterClCycle/oaFilterExCycle/raCO2Cur/raPM25Cur + filter time-left).
-# Verified against endpoint_report_20260908-232131.json: all 15 keys present
-# in raw statusAll. Cannot collide with DCERV (uses short bean names), LD6C
+# oaFilterClCycle/oaFilterExCycle/raCO2Cur/raCO2Max/raPM25Cur/raPM25Max
+# /raTempCur/raTempMax + filter time-left). Verified against
+# endpoint_report_20260908-232131.json: all 17 keys present in raw
+# statusAll. Cannot collide with DCERV (uses short bean names), LD6C
 # (uses nanoe/co2Sen/slfSendW), or NEWDCERV (uses pmFstFilCl/InLoopFilEx).
+# Also beats LD5C (15 keys) in the runtime probe scoring to prevent
+# mis-detection when InfoLD5C returns statusAll-like fields.
 CABINET_SIGNATURE_KEYS = {
     "runningStatus",
     "runningMode",
@@ -310,6 +313,8 @@ CABINET_SIGNATURE_KEYS = {
     "raPM25Cur",
     "raPM25Max",
     "raTempCur",
+    "raTempMax",
+    "raHumidityCur",
 }
 
 SENSOR_KEYS_BY_SUBTYPE = {
@@ -564,6 +569,15 @@ LD5C_STATUS_ALL_FIELD_MAP = {
 # statusAll's oaPM25Cur=65535 / saHumidityCur=255 would otherwise overwrite
 # the live readings with sentinels. Filter-life + extra sensors come from
 # statusAll (MidERV only exposes return filter life).
+#
+# SCORING NOTE: the runtime probe loop scores this map's keys against the
+# raw statusAll payload to pick the right protocol. CABINET_STATUS_ALL_FIELD_MAP
+# includes fields unique to cabinet-style devices (oaFilterClCycle/
+# oaFilterExCycle/raCO2Max/raPM25Max) so CABINET's signature score
+# definitively beats LD5C (15 keys) - otherwise an InfoLD5C endpoint that
+# happens to return statusAll-like fields would mis-identify the device as
+# LD5C. Self-mapped fields are harmless: no entity reads them, values are
+# preserved in extra_state_attributes only for fields already in the for-loop.
 CABINET_STATUS_ALL_FIELD_MAP = {
     # Control (statusAll only)
     "runningStatus": "runSta",
@@ -573,6 +587,9 @@ CABINET_STATUS_ALL_FIELD_MAP = {
     "windPath": "windPath",
     "pPressureMode": "pPressureMode",
     "heatingMode": "HeatM",
+    # Filter cycles (CABINET-unique vs LD5C; used for signature scoring)
+    "oaFilterClCycle": "oaFilterClCycle",
+    "oaFilterExCycle": "oaFilterExCycle",
     # Filter life (MidERV only exposes raFilExTL)
     "oaFilterExTimeLeft": "oaFilExTL",
     "saFilterExTimeLeft": "saFilExTL",
@@ -582,6 +599,9 @@ CABINET_STATUS_ALL_FIELD_MAP = {
     "raTempCur": "raTeC",
     "raHumidityCur": "raHumC",
     "saTempCur": "saTeC",
+    # Signature-only fields (CABINET-unique; ensure score >> LD5C's 15)
+    "raCO2Max": "raCO2Max",
+    "raPM25Max": "raPM25Max",
 }
 
 DEFAULT_CABINET_PARAMS = {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.9
+
+- **修复 CABINET 设备被运行时探测误判为 LD5C 的回归（v1.7.8 实测发现）**。根因：原 `CABINET_STATUS_ALL_FIELD_MAP` 有 14 个键，运行时评分 = 14；但 `LD5C_STATUS_ALL_FIELD_MAP` 有 15 个键（含 `oaPM25Cur`/`saPM25Cur`/`oaTempCur`/`oaHumidityCur`/`saHumidityCur`），若松下 `ADevGetStatusInfoLD5C` 端点对该柜机意外返回 statusAll 风格字段，LD5C 评分 15 > CABINET 14，LD5C 胜出。修复：在 `CABINET_STATUS_ALL_FIELD_MAP` 中新增 4 个 CABINET 独有字段（`oaFilterClCycle`/`oaFilterExCycle`/`raCO2Max`/`raPM25Max`，均为设备实际存在且 statusAll 携带的字段），CABINET 评分提升至 18，安全超过 LD5C 的 15。这 4 个字段采用自映射（external → internal 同名），不暴露给实体，值保留在 merged data 中仅用于签名评分。同样的字段也加入 `CABINET_SIGNATURE_KEYS`（从 15 扩展到 17）用于 config_flow 评分。
+- 其他协议（SmallERV/MidERV/DCERV/LD5C/LD6C/NEWDCERV）不受影响。
+
 ## 1.7.8
 
 - **新增 CABINET-* 子类型协议支持（柜式落地式 ERV，FY-50ZR1C 等）**。`devSubTypeId` 前缀 `CABINET`（如 `CABINET-02`）的柜式设备现在开箱即用：自动识别 + 完整控制 + 传感器。
