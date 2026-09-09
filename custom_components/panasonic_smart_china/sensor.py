@@ -6,9 +6,9 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
-    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
+    UnitOfDensity,
+    UnitOfRatio,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -44,21 +44,21 @@ SENSOR_SPECS: tuple[ERVSensorSpec, ...] = (
         "室外 PM2.5",
         "oa_pm25",
         SensorDeviceClass.PM25,
-        CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
     ),
     ERVSensorSpec(
         "saPMC",
         "送风 PM2.5",
         "sa_pm25",
         SensorDeviceClass.PM25,
-        CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
     ),
     ERVSensorSpec(
         "raPMC",
         "回风 PM2.5",
         "ra_pm25",
         SensorDeviceClass.PM25,
-        CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
     ),
     ERVSensorSpec(
         "oaHumC",
@@ -107,7 +107,7 @@ SENSOR_SPECS: tuple[ERVSensorSpec, ...] = (
         "回风 CO2",
         "ra_co2",
         SensorDeviceClass.CO2,
-        CONCENTRATION_PARTS_PER_MILLION,
+        UnitOfRatio.PARTS_PER_MILLION,
     ),
     ERVSensorSpec(
         "raTVC",
