@@ -604,6 +604,9 @@ CABINET_STATUS_ALL_FIELD_MAP = {
     "raPM25Max": "raPM25Max",
 }
 
+# Internal-name defaults used for status reads + as the merge base for
+# MidERV + mapped statusAll fields. Field names are SHORT (runSta/runM/
+# airVo/holM) because that's what the entity code consumes.
 DEFAULT_CABINET_PARAMS = {
     "runSta": 0,
     "runM": 255,
@@ -617,11 +620,39 @@ DEFAULT_CABINET_PARAMS = {
     "raFilExTL": 255,
 }
 
+# Info-family SET bean. Field names are LONG camelCase (runningStatus/
+# runningMode/airVolume) because the InfoFloorPlacedERV endpoint expects
+# the device's native vocabulary - same lesson as LD5C v1.7.3. 255 = keep
+# current value; only the target field carries the new value per request.
+# Sent via single_field_commands (one HTTP request per field change).
+CABINET_SET_DEFAULT_PARAMS = {
+    "runningStatus": 255,
+    "runningMode": 255,
+    "airVolume": 255,
+    "holidayMode": 255,
+    "windPath": 255,
+    "pPressureMode": 255,
+    "heatingMode": 255,
+}
+
+# Map internal short names -> Info-family wire names. Applied to changes
+# before sending, so async_send_command({"runSta": 1}) produces a SET body
+# with runningStatus=1 (matching the InfoFloorPlacedERV bean).
+CABINET_SET_FIELD_NAME_MAP = {
+    "runSta": "runningStatus",
+    "runM": "runningMode",
+    "airVo": "airVolume",
+    "holM": "holidayMode",
+    "windPath": "windPath",
+    "pPressureMode": "pPressureMode",
+    "HeatM": "heatingMode",
+}
+
+# safe_control_keys lists the LONG bean names only - identity is sent at
+# the body top level for Info-family endpoints (set_identity_top_level),
+# so deviceId/token/usrId are NOT part of the safe_keys filter here.
 CABINET_SAFE_CONTROL_KEYS = [
-    CONF_DEVICE_ID,
-    CONF_TOKEN,
-    CONF_USR_ID,
-    *DEFAULT_CABINET_PARAMS.keys(),
+    *CABINET_SET_DEFAULT_PARAMS.keys(),
 ]
 
 DEFAULT_DC_ERV_PARAMS = {
@@ -937,20 +968,33 @@ SUPPORTED_ERV_SUBTYPES = {
     DEVICE_SUBTYPE_CABINET: {
         "label": "CabinetERV",
         # Live sensors + timers come from ADevGetStatusMidERV (MidERV endpoint
-        # answers real values for cabinet devices; InfoLD5C/LD6C/InfoERV all
-        # fail or return sentinels).
+        # answers real values for cabinet devices; InfoERV/InfoFloorPlacedERV
+        # require Info-family payload that we don't currently use for reads).
         "get_url": "https://app.psmartcloud.com/App/ADevGetStatusMidERV",
-        # SET endpoint assumed to mirror GET (MidERV-style single-field
-        # commands). Not yet verified against a live FY-50ZR1C - if SET
-        # silently drops commands, try the LD5C SET family next.
-        "set_url": "https://app.psmartcloud.com/App/ADevSetStatusMidERV",
+        # SET endpoint verified live via probe_set_endpoints.py: only
+        # ADevSetStatusInfoERV and ADevSetStatusInfoFloorPlacedERV return
+        # HTTP 200 with todoId (HTTP 404 for CABINET-specific variants).
+        # FloorPlacedERV is semantically correct for FY-50ZR1C (cabinet
+        # floor-placed unit); InfoERV is the fallback for other cabinet
+        # device categories. Sending MidERV-style short names to this
+        # endpoint silently drops commands - same regression that LD5C
+        # v1.7.3 fixed by switching to InfoLD5C with long bean names.
+        "set_url": "https://app.psmartcloud.com/App/ADevSetStatusInfoFloorPlacedERV",
         "default_params": DEFAULT_CABINET_PARAMS,
-        "control_params": DEFAULT_CABINET_PARAMS,
-        # single_field_commands=True mirrors MidERV (one field per request,
-        # 255 = keep) which works without a live-status merge. Status-all
-        # values for control fields may lag real device state by up to 30s
-        # (the cloud cache doesn't refresh post-command - same caveat as
-        # LD5C pre-v1.7.4).
+        # Info-family SET bean uses LONG camelCase field names + identity at
+        # body top level + xtoken auth header. set_field_name_map translates
+        # the internal short names (runSta/runM/airVo) into the wire bean
+        # before the request is built.
+        "control_params": CABINET_SET_DEFAULT_PARAMS,
+        "set_field_name_map": CABINET_SET_FIELD_NAME_MAP,
+        "set_identity_top_level": True,
+        "set_request_id": 2,
+        "use_xtoken_header": True,
+        # single_field_commands=True mirrors MidERV/InfoLD5C: one HTTP
+        # request per field change (255 = keep on the unchanged fields).
+        # merge_current_status_for_control=False avoids an extra GET round-
+        # trip before each SET (the InfoFamily bean already carries 255
+        # sentinels for the unchanged fields).
         "merge_current_status_for_control": False,
         "single_field_commands": True,
         "safe_control_keys": CABINET_SAFE_CONTROL_KEYS,

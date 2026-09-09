@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.10
+
+- **修复 CABINET 控制完全不生效（开关/风量/运行模式/假日模式均无效）**。根因：v1.7.8/v1.7.9 的 SET 链路沿用 `ADevSetStatusMidERV` + 短名（`runSta`/`runM`/`airVo`），但 FY-50ZR1C 的原生词汇是长驼峰（`runningStatus`/`runningMode`/`airVolume`），松下云端**接受请求并返回成功**，但设备不认这套字段 — 与 LD5C v1.7.3 修复的根因完全相同。
+- **切换 SET 端点到 `ADevSetStatusInfoFloorPlacedERV`**（用户实测 8 个候选端点，只有 InfoERV/InfoFloorPlacedERV 返回 HTTP 200 + `todoId`，CABINET-*/InfoLD5C/老协议变体均返回 404）。
+- **新增 Info 家族 SET bean（`CABINET_SET_DEFAULT_PARAMS`）**：7 个长驼峰字段（`runningStatus`/`runningMode`/`airVolume`/`holidayMode`/`windPath`/`pPressureMode`/`heatingMode`），255 = 保持。
+- **新增 `set_field_name_map`**（`runSta`→`runningStatus` 等 7 个映射），实体代码继续使用短名，向松下云端发送前自动转长名。
+- **启用 Info 家族请求特征**：`set_identity_top_level=True`、`use_xtoken_header=True`、`set_request_id=2`。
+- 调整 `safe_control_keys`：移除 identity（已上 body 顶层），改为只列 bean 字段名。
+- GET 端点维持 `ADevGetStatusMidERV`（实测返回 39 字段真实传感器 + 定时器，Info 家族 GET 需特殊 payload 暂未切换）。
+- 用户操作：升级到 v1.7.10 后**完整重启**HA，控制命令即可生效。
+
 ## 1.7.9
 
 - **修复 CABINET 设备被运行时探测误判为 LD5C 的回归（v1.7.8 实测发现）**。根因：原 `CABINET_STATUS_ALL_FIELD_MAP` 有 14 个键，运行时评分 = 14；但 `LD5C_STATUS_ALL_FIELD_MAP` 有 15 个键（含 `oaPM25Cur`/`saPM25Cur`/`oaTempCur`/`oaHumidityCur`/`saHumidityCur`），若松下 `ADevGetStatusInfoLD5C` 端点对该柜机意外返回 statusAll 风格字段，LD5C 评分 15 > CABINET 14，LD5C 胜出。修复：在 `CABINET_STATUS_ALL_FIELD_MAP` 中新增 4 个 CABINET 独有字段（`oaFilterClCycle`/`oaFilterExCycle`/`raCO2Max`/`raPM25Max`，均为设备实际存在且 statusAll 携带的字段），CABINET 评分提升至 18，安全超过 LD5C 的 15。这 4 个字段采用自映射（external → internal 同名），不暴露给实体，值保留在 merged data 中仅用于签名评分。同样的字段也加入 `CABINET_SIGNATURE_KEYS`（从 15 扩展到 17）用于 config_flow 评分。
