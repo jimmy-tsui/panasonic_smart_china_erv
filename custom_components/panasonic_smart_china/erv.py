@@ -779,15 +779,43 @@ class PanasonicERVCoordinator(DataUpdateCoordinator[dict]):
         self._family_id = new_data.get(CONF_FAMILY_ID)
         self._real_family_id = new_data.get(CONF_REAL_FAMILY_ID)
 
-        if not self._family_id or not self._real_family_id:
+        if not self._family_id and not self._real_family_id:
             _LOGGER.warning(
-                "Silent re-login for %s did not return familyId; "
+                "Silent re-login for %s did not return familyId or realFamilyId; "
+                "the account may need re-adding",
+                self._device_id,
+            )
+            return False
+        if not self._family_id:
+            # Known account quirk (issue #1, v1.7.2): some Panasonic accounts
+            # never return familyId in UsrLogin. realFamilyId alone is enough
+            # for UsrGetBindDevInfo to succeed (params tolerated as null), so
+            # statusAll reads work fine. Demote to debug to silence the
+            # misleading "re-add" warning on these accounts.
+            _LOGGER.debug(
+                "Silent re-login for %s did not return familyId, but "
+                "realFamilyId is present (known account quirk per v1.7.2, "
+                "issue #1). statusAll requests will still be sent.",
+                self._device_id,
+            )
+        if not self._real_family_id:
+            _LOGGER.warning(
+                "Silent re-login for %s did not return realFamilyId; "
                 "the account may need re-adding",
                 self._device_id,
             )
             return False
 
-        _LOGGER.info("Self-healed familyId for %s via silent re-login", self._device_id)
+        if self._family_id:
+            _LOGGER.info(
+                "Self-healed familyId for %s via silent re-login", self._device_id
+            )
+        else:
+            _LOGGER.info(
+                "Silent re-login for %s: realFamilyId refreshed (familyId "
+                "absent but not required)",
+                self._device_id,
+            )
         return True
 
     @staticmethod
