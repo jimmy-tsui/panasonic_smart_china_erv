@@ -625,14 +625,34 @@ DEFAULT_CABINET_PARAMS = {
 # the device's native vocabulary - same lesson as LD5C v1.7.3. 255 = keep
 # current value; only the target field carries the new value per request.
 # Sent via single_field_commands (one HTTP request per field change).
+# Full bean (29 fields) discovered via HAR capture of the official Android
+# App: the cloud silently drops commands when the bean is incomplete
+# (verified by user's 15-endpoint probe showing todoId returned but
+# device never acted). Referer is REQUIRED (validated server-side).
 CABINET_SET_DEFAULT_PARAMS = {
     "runningStatus": 255,
     "runningMode": 255,
     "airVolume": 255,
-    "holidayMode": 255,
-    "windPath": 255,
-    "pPressureMode": 255,
     "heatingMode": 255,
+    "pPressureMode": 255,
+    "nanoe": 255,
+    "airDirection": 255,
+    "holidayMode": 255,
+    "PM25AutoSensitivity": 255,
+    "CO2AutoSensitivity": 255,
+    "oaFilterExist": 255,
+    "saFilterClCycle": 255,
+    "oaFilterClCycle": 255,
+    "saFilterExCycle": 255,
+    "oaFilterExCycle": 255,
+    "saFilterExist": 255,
+    "onTimerSetting": 255,
+    "onTimerHour": 127,
+    "onTimerMinute": 127,
+    "offTimerSetting": 255,
+    "offTimerHour": 127,
+    "offTimerMinute": 127,
+    "panelLockSetting": 255,
 }
 
 # Map internal short names -> Info-family wire names. Applied to changes
@@ -643,10 +663,20 @@ CABINET_SET_FIELD_NAME_MAP = {
     "runM": "runningMode",
     "airVo": "airVolume",
     "holM": "holidayMode",
-    "windPath": "windPath",
+    "windPath": "airDirection",
     "pPressureMode": "pPressureMode",
     "HeatM": "heatingMode",
 }
+
+# Referer template matching the official web control page. The cloud
+# validates this header server-side; SET commands without it return
+# HTTP 200 + todoId but the device never acts. Captured from HAR file
+# of the real Android App (app.psmartcloud.com_09-12-2026-15-19-38.har).
+CABINET_REFERER_TEMPLATE = (
+    "https://app.psmartcloud.com/ca/cn/0800/CABINET-02/index.html"
+    "?deviceId={device_id}&usrId={usr_id}&SSID={ssid}"
+    "&devType={dev_type}&deviceName={device_name}"
+)
 
 # safe_control_keys lists the LONG bean names only - identity is sent at
 # the body top level for Info-family endpoints (set_identity_top_level),
@@ -990,6 +1020,12 @@ SUPPORTED_ERV_SUBTYPES = {
         "set_identity_top_level": True,
         "set_request_id": 2,
         "use_xtoken_header": True,
+        # The cloud validates Referer against the official CABINET-02
+        # web control page URL. SET requests without it return HTTP 200
+        # + todoId but the device silently drops the command - the same
+        # root cause that made 70+ endpoint probes all 'succeed' without
+        # any actual control effect.
+        "referer_template": CABINET_REFERER_TEMPLATE,
         # single_field_commands=True mirrors MidERV/InfoLD5C: one HTTP
         # request per field change (255 = keep on the unchanged fields).
         # merge_current_status_for_control=False avoids an extra GET round-

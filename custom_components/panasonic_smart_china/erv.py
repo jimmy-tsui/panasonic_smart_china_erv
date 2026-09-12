@@ -125,6 +125,7 @@ class PanasonicERVCoordinator(DataUpdateCoordinator[dict]):
         self._set_field_name_map = protocol.get("set_field_name_map", {})
         self._set_identity_top_level = protocol.get("set_identity_top_level", False)
         self._use_xtoken_header = protocol.get("use_xtoken_header", False)
+        self._referer_template = protocol.get("referer_template", "")
         self._supports_holiday_switch = protocol.get("supports_holiday_switch", True)
         self._url_get = protocol["get_url"]
         self._url_set = protocol["set_url"]
@@ -976,4 +977,15 @@ class PanasonicERVCoordinator(DataUpdateCoordinator[dict]):
             # Info-family endpoints are controlled through the same auth
             # header the official web control page sends.
             headers["xtoken"] = f"SSID={self._ssid}"
+        if self._referer_template:
+            # The cloud validates Referer against the official web control
+            # page URL. Without it, SET requests return HTTP 200 + todoId
+            # but the command is silently discarded by the device.
+            headers["Referer"] = self._referer_template.format(
+                device_id=self._device_id,
+                usr_id=self._usr_id,
+                ssid=self._ssid,
+                dev_type=self._dev_sub_type_id or "ERV",
+                device_name=self._entry.title or "Panasonic",
+            )
         return headers

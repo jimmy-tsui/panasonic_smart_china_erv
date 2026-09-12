@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.13
+
+- **最终修复 CABINET 控制不生效（HAR 文件分析揭露根因）**。v1.7.10/11/12 已切换到正确的端点 `ADevSetStatusInfoFloorPlacedERV` 并使用长驼峰字段名，但云端一直返回 HTTP 200 + `todoId` 而设备不响应。用户抓包提交的 HAR 文件揭示了两个之前没意识到的细节：
+  - **缺少 `Referer` 头**：松下云端验证 Referer 必须是 `https://app.psmartcloud.com/ca/cn/0800/CABINET-02/index.html?deviceId=...&usrId=...&SSID=...&devType=FY-50ZR1C&deviceName=...`，缺失或错误的 Referer 会让云端"假接受"请求（返回 todoId 但不真正推送给设备）。这是之前 70+ 端点探测都"成功但不工作"的真正原因。
+  - **Bean 字段不完整**：v1.7.10 的 7 字段 bean 太短。松下 App 实际发 23 个控制字段（`runningStatus`/`runningMode`/`airVolume`/`heatingMode`/`pPressureMode`/`nanoe`/`airDirection`/`holidayMode`/`PM25AutoSensitivity`/`CO2AutoSensitivity`/`oaFilterExist`/`saFilterClCycle`/`oaFilterClCycle`/`saFilterExCycle`/`oaFilterExCycle`/`saFilterExist`/`onTimerSetting`/`onTimerHour`/`onTimerMinute`/`offTimerSetting`/`offTimerHour`/`offTimerMinute`/`panelLockSetting`），全部 255/127 保持。
+- 新增 `referer_template` 协议字段（`_get_headers()` 按需填充）。
+- 新增 `CABINET_REFERER_TEMPLATE` 模板字符串，匹配 HAR 文件中抓到的官方 web 控制页 URL。
+- `CABINET_SET_DEFAULT_PARAMS` 从 7 个字段扩展到 23 个。
+- 字段映射表调整：`windPath`（内部名）→ `airDirection`（实际云端字段名；之前错把 `windPath` 当成外部名）。
+- 经验沉淀：`SET 请求返回 todoId ≠ 控制生效`。todoId 只是云端记录，但设备是否真的接收依赖完整的 bean + 正确的 Referer。
+
 ## 1.7.10
 
 - **修复 CABINET 控制完全不生效（开关/风量/运行模式/假日模式均无效）**。根因：v1.7.8/v1.7.9 的 SET 链路沿用 `ADevSetStatusMidERV` + 短名（`runSta`/`runM`/`airVo`），但 FY-50ZR1C 的原生词汇是长驼峰（`runningStatus`/`runningMode`/`airVolume`），松下云端**接受请求并返回成功**，但设备不认这套字段 — 与 LD5C v1.7.3 修复的根因完全相同。
